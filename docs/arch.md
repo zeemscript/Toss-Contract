@@ -1,6 +1,6 @@
 # Trustless-OSS Contract Architecture
 
-This document describes the current implementation in `trustless-oss/src`. The contract stores one repository escrow per deployed contract instance. A backend can deploy separate instances when it needs separate isolation boundaries.
+This document describes the current implementation in `toss/src`. The contract stores one repository escrow per deployed contract instance. A backend can deploy separate instances when it needs separate isolation boundaries.
 
 ## System context
 
@@ -38,10 +38,16 @@ flowchart TB
 
 | Module | Responsibility |
 | --- | --- |
-| `lib.rs` | Contract entry points, escrow/milestone transitions, and token transfers. |
+| `lib.rs` | Contract declaration and thin ABI-preserving entry-point wrappers. |
+| `admin.rs` | Initialization, admin transfer, maintainer/platform updates, and pause/resume transitions. |
+| `funding.rs` | Deposits, withdrawals, and escrow balance queries. |
+| `milestones.rs` | Milestone creation, updates, assignment, cancellation, and queries. |
+| `payouts.rs` | Contributor payout release and payout accounting. |
+| `accounting.rs` | Checked balance arithmetic and available-balance calculation. |
 | `types.rs` | `EscrowState`, `Milestone`, `MilestoneStatus`, `PayoutTarget`, and `BalanceInfo` contract types. |
 | `storage.rs` | Persistent keys, reads/writes, issue-ID indexing, and storage TTL extension. |
 | `auth.rs` | Soroban authorization checks for the maintainer, platform, and active escrow state. |
+| `cctp.rs` | CCTP target validation, amount normalization, and cross-chain burn integration. |
 | `events.rs` | Typed event topics emitted after state-changing operations. |
 | `error.rs` | Stable numeric `ContractError` values returned by entry points. |
 | `test.rs` | In-memory Soroban environment, token mocks, authorization tests, and payout tests. |
@@ -59,7 +65,7 @@ flowchart LR
     Assign[assign / reassign contributor] --> Milestone
     Cancel[cancel_milestone] --> Escrow
     Cancel --> Milestone
-    Release[release / partial_release] --> Escrow
+    Release[release_funds] --> Escrow
     Release --> Milestone
     Queries[get_escrow / get_balance / list_milestones] -. read .-> Escrow
     Queries -. read .-> Milestone
@@ -72,11 +78,11 @@ flowchart LR
     class Queries query;
 ```
 
-All application keys are stored in Soroban persistent storage and writes extend their TTL to the configured `100_000` minimum and maximum values. `EscrowIssueIds` is the index used by `list_milestones`; each milestone is stored separately under its issue ID.
+All application keys are stored in Soroban persistent storage. Writes and idle-prone reads extend each key (and the contract instance) to `env.storage().max_ttl()`, using half of that value as the refresh threshold. `EscrowIssueIds` is the index used by `list_milestones`, which returns pages of at most 50 milestones via `list_milestones(offset, limit)`; each milestone is stored separately under its issue ID.
 
 The deployed contract has one `EscrowState`, not a map of escrow IDs. Its state tracks:
 
-- `total_deposited`: cumulative funds added to the contract balance.
+- `total_deposited`: current principal accounted by the escrow; deposits increase it and withdrawals decrement it.
 - `reserved`: rewards belonging to pending or active milestones.
 - `total_released`: cumulative amount paid to contributors.
 - `available`: derived as `total_deposited - reserved - total_released`.
@@ -89,7 +95,6 @@ stateDiagram-v2
     Pending --> Active: assign_contributor
     Active --> Active: reassign_contributor
     Active --> Released: release_funds
-    Active --> Released: partial_release
     Pending --> Cancelled: cancel_milestone
     Active --> Cancelled: cancel_milestone
     Released --> [*]
@@ -105,7 +110,7 @@ stateDiagram-v2
     class Cancelled cancelled;
 ```
 
-Creating a milestone reserves its full reward. Assignment changes the payout target and status but does not change the reserved amount. A full release pays the full reward; a partial release pays the requested amount and makes the remainder available again. Cancellation un-reserves the full reward without transferring funds.
+Creating a milestone reserves its full reward. Assignment changes the payout target and status but does not change the reserved amount. A release pays the requested amount, at most the full reward; any unpaid remainder becomes available again. Cancellation un-reserves the full reward without transferring funds.
 
 ## Payout sequence
 
@@ -116,7 +121,7 @@ sequenceDiagram
     participant T as USDC SAC
     participant S as Stellar contributor
 
-    W->>C: release_funds(issue_id)
+    W->>C: release_funds(issue_id, amount)
     C->>C: require platform auth
     C->>C: validate Active milestone
     C->>T: transfer(contract, contributor, amount)
@@ -134,7 +139,7 @@ sequenceDiagram
 | Later `initialize` calls | The stored admin authorizes; the existing escrow still prevents reinitialization. |
 | `deposit_funds`, `withdraw_funds` | Maintainer. |
 | `create_milestone`, `assign_contributor`, `reassign_contributor`, `cancel_milestone` | Maintainer. |
-| `release_funds`, `partial_release` | Platform wallet. |
+| `release_funds` | Platform wallet. |
 | Query entry points | No explicit caller authorization. |
 
 ## Related documentation

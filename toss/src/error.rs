@@ -6,25 +6,26 @@ use soroban_sdk::contracterror;
 pub enum ContractError {
     // Auth
     NotAdmin = 1,
-    NotPlatform = 2,
-    NotMaintainer = 3,
 
     // Escrow
     EscrowNotFound = 10,
     EscrowAlreadyExists = 11,
     EscrowInactive = 12,
+    EscrowAlreadyActive = 13,
 
     // Balance
     InsufficientBalance = 20, // deposit would leave pool underfunded
     WithdrawExceedsAvailable = 21,
     ZeroAmount = 22,
+    BalanceInvariantBroken = 23,
 
     // Milestone
     MilestoneNotFound = 30,
     MilestoneNotPending = 31, // assign_contributor requires Pending
-    MilestoneNotActive = 32,  // release/cancel requires Active
+    MilestoneNotActive = 32,  // release/reassignment requires Active
     DuplicateIssueId = 33,
-    ReleaseTooLarge = 34, // partial_release amount > milestone reward
+    ReleaseTooLarge = 34, // release_funds amount > milestone reward
+    MilestoneNotCancellable = 35,
 
     // Contributor
     ContributorNotSet = 40,
@@ -34,4 +35,5 @@ pub enum ContractError {
     EmptyRecipient = 51,
     ZeroBurnAmount = 52,
     InvalidCctpRecipientPadding = 53,
+    ZeroPageLimit = 60, // list_milestones rejects limit == 0
 }

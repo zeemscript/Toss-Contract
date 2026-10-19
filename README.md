@@ -1,18 +1,22 @@
-<img width="4500" height="1100" alt="TOSS-Banner" src="https://github.com/user-attachments/assets/d41757e4-5123-41c1-a8b0-09b53176f6d2" />
-
 <div align="center">
+
+
+<img width="280" alt="toss" src="https://github.com/user-attachments/assets/eb15200e-c4c5-4405-aca1-bbb692bd3480" />
 
 **A Soroban smart contract that turns repository funding into transparent, milestone-based USDC payouts.**
 
-[![CI](https://github.com/Trustless-OSS/Toss-Contract/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/Trustless-OSS/Toss-Contract/actions/workflows/rust.yml)
-[![Rust 2021](https://img.shields.io/badge/Rust-2021-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Build](https://github.com/Trustless-OSS/Toss-Contract/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Trustless-OSS/Toss-Contract/actions/workflows/build.yml)
+[![Tests](https://github.com/Trustless-OSS/Toss-Contract/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Trustless-OSS/Toss-Contract/actions/workflows/test.yml)
 [![Soroban SDK](https://img.shields.io/badge/Soroban%20SDK-v23-7B3FE4?logo=stellar&logoColor=white)](https://soroban.stellar.org/)
 [![Stellar](https://img.shields.io/badge/Network-Stellar-08B5E5?logo=stellar&logoColor=white)](https://stellar.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22C55E.svg)](LICENSE)
 
-[Quick start](#-quick-start) · [How it works](#-how-it-works) · [Contract API](docs/contract-spec.md) · [Architecture](docs/arch.md) · [Contributing](docs/contributing.md)
+[Quick start](#-quick-start) · [How it works](#-how-it-works) · [Contract API](docs/contract-spec.md) · [Architecture](docs/arch.md) · [CCTP report](docs/cctp_report.md) · [Contributing](docs/contributing.md)
 
 </div>
+
+<!-- COVERAGE_BADGE_START -->
+<!-- COVERAGE_BADGE_END -->
 
 ---
 
@@ -60,16 +64,25 @@ flowchart LR
 
 ### Milestone lifecycle
 
-```text
-🆕 Pending ── assign contributor ──▶ ⚡ Active ── release ──▶ ✅ Released
-                                            │
-                                            ├── partial release ──▶ ✅ Released
-                                            └── cancel ──────────▶ 🚫 Cancelled
+```mermaid
+flowchart LR
+  Pending["🆕 Pending"] -->|assign contributor| Active["⚡ Active"]
+  Active -->|release_funds| Released["✅ Released"]
+  Active -->|cancel| Cancelled["🚫 Cancelled"]
+  Pending -->|cancel| Cancelled
 
-🆕 Pending ── cancel ───────────────────────────────────────────▶ 🚫 Cancelled
+  classDef pending fill:#fff3bf,stroke:#f08c46,stroke-width:2px,color:#5f370e;
+  classDef active fill:#d0ebff,stroke:#1971c2,stroke-width:2px,color:#0b2e4f;
+  classDef released fill:#d3f9d8,stroke:#2b8a3e,stroke-width:2px,color:#123b1a;
+  classDef cancelled fill:#ffd6d6,stroke:#e03131,stroke-width:2px,color:#6b0b0b;
+
+  class Pending pending;
+  class Active active;
+  class Released released;
+  class Cancelled cancelled;
 ```
 
-> 💡 Creating a milestone reserves its full reward. A cancellation returns the entire reward to the available pool; a partial release returns only the unpaid remainder.
+> 💡 Creating a milestone reserves its full reward. A cancellation returns the entire reward to the available pool; releasing less than the full reward makes the unpaid remainder available again.
 
 ## ⚡ Quick start
 
@@ -115,14 +128,14 @@ target/wasm32-unknown-unknown/release/trustless_oss.wasm
 | 🏗️ Create escrow | `initialize` | Maintainer on the first call |
 | 💰 Fund or withdraw | `deposit_funds` / `withdraw_funds` | Maintainer |
 | 🎯 Manage milestones | `create_milestone`, `assign_contributor`, `reassign_contributor`, `cancel_milestone` | Maintainer |
-| 💸 Pay contributors | `release_funds` / `partial_release` | Platform wallet |
-| 🔎 Read contract state | `get_escrow`, `get_milestone`, `get_balance`, `list_milestones` | Public |
+| 💸 Pay contributors | `release_funds(issue_id, amount)` | Platform wallet |
+| 🔎 Read contract state | `get_escrow`, `get_milestone`, `get_balance`, `list_milestones`, `get_milestone_count` | Public |
 
 Amounts use token base units. For a 7-decimal USDC token, `10_000_000` base units equals **1 USDC**.
 
 ## 🌍 Cross-chain payouts with CCTP
 
-TOSS can pay contributors beyond Stellar through **CCTP**. When a milestone is assigned a CCTP target, a full or partial release calls CCTP's `deposit_for_burn` flow: USDC is burned on Stellar and can be redeemed for the specified recipient on the destination chain.
+TOSS can pay contributors beyond Stellar through **CCTP**. When a milestone is assigned a CCTP target, `release_funds` calls CCTP's `deposit_for_burn` flow: USDC is burned on Stellar and can be redeemed for the specified recipient on the destination chain.
 
 ```text
 🔒 Stellar USDC escrow → 🔥 CCTP burn → 📡 attestation and redemption → 🌍 recipient on destination chain
@@ -134,7 +147,9 @@ Set the contributor target to `PayoutTarget::Cctp(destination_domain, recipient)
 | --- | ---: |
 | Ethereum | `0` |
 | Avalanche | `1` |
+| OP Mainnet | `2` |
 | Arbitrum | `3` |
+| Noble | `4` |
 | Solana | `5` |
 | Base | `6` |
 | Polygon PoS | `7` |
@@ -209,3 +224,4 @@ cargo test --workspace
 Built for transparent open-source funding on <a href="https://stellar.org/">Stellar</a>. ✨
 
 </div>
+
